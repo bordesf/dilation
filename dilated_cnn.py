@@ -1,5 +1,7 @@
 # Model fron the paper Multi-Scale Context Aggregation by Dilated Convolutions
 # Original Caffe source:  https://github.com/fyu/dilation
+# Original Lasagne source https://groups.google.com/forum/#!topic/lasagne-users/SQEHDdVL11U
+
 
 from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
 from lasagne.layers import InputLayer, DropoutLayer
