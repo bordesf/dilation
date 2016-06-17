@@ -1,22 +1,20 @@
-# Using caffe model to set up the lasagne model
-# You should download the caffemodel to use this files
+# Using only lasagne
+# You should download the lasagne model from somewhere
+# or create the pkl files corresponding to the caffemodel
+# with convert_to_pkl.py
 
 import argparse
 import cv2
 import json
 import numba
-import caffe
 import numpy as np
 from os.path import dirname, exists, join, splitext
 import lasagne
 import theano
 import theano.tensor as T
-
+import pickle
 # Import dilated cnn lasagne model
 from dilated_cnn import build_model
-
-from lasagne.layers import DilatedConv2DLayer as DilatedConvLayer
-from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
 
 __author__ = 'Fisher Yu'
 __copyright__ = 'Copyright (c) 2016, Fisher Yu'
@@ -56,41 +54,29 @@ class Dataset(object):
         self.dilation = info['dilation']
         self.zoom = info['zoom']
         self.name = dataset_name
+        if dataset_name == 'pascal_voc':
+            self.shape = (1, 3, 900, 900)
+        elif dataset_name == 'camvid':
+            self.shape = (1, 3, 900, 1100)
+        elif dataset_name == 'kitti':
+            self.shape = (1, 3, 852, 1640)
+        else:
+            self.shape = (1, 3, 1396, 1396)
         self.model_name = 'dilation{}_{}'.format(self.dilation, self.name)
         self.model_path = join(self.work_dir, 'models',
                                self.model_name + '_deploy.prototxt')
 
+    # Load pkl file instead of caffe model
     @property
     def pretrained_path(self):
         p = join(dirname(__file__), 'pretrained',
-                 self.model_name + '.caffemodel')
+                 self.model_name + '.pkl')
         if not exists(p):
             download_path = join(self.work_dir, 'pretrained',
                                  'download_{}.sh'.format(self.name))
             raise IOError('Pleaes run {} to download the pretrained network '
                           'weights first'.format(download_path))
         return p
-
-
-# Load parameters of caffe into the lasagne model
-def load_caffe_model(net_lasagne, net_caffe):
-    layers_caffe = dict(zip(list(net_caffe._layer_names), net_caffe.layers))
-    for name, layer in net_lasagne.items():
-        try:
-            if isinstance(layer, ConvLayer) or isinstance(layer, DilatedConvLayer):
-                W = layers_caffe[name].blobs[0].data
-                if isinstance(layer, DilatedConvLayer):
-                    W = W.transpose(1, 0, 2, 3)
-                assert W.shape == layer.W.get_value().shape
-                layer.W.set_value(W)
-                b = layers_caffe[name].blobs[1].data
-                assert b.shape == layer.b.get_value().shape
-                layer.b.set_value(b)
-            else:
-                layer.W.set_value(layers_caffe[name].blobs[0].data)
-                layer.b.set_value(layers_caffe[name].blobs[1].data)
-        except AttributeError:
-            continue
 
 
 def predict(dataset_name, input_path, output_path):
@@ -103,14 +89,13 @@ def predict(dataset_name, input_path, output_path):
     outputs = lasagne.layers.get_output(net['prob'], deterministic=True)
     fn = theano.function([input_var], outputs)
 
-    # Load caffe model
-    net_caffe = caffe.Net(dataset.model_path, dataset.pretrained_path, caffe.TEST)
-
-    # Set the parameters from caffe into lasagne
-    load_caffe_model(net, net_caffe)
+    # Set the parameters from lasagne
+    f = open(dataset.pretrained_path, 'rb')
+    params = pickle.load(f)
+    [p.set_value(pval) for (p, pval) in zip(lasagne.layers.get_all_params(net['prob']), params)]
 
     # Image processing
-    input_dims = net_caffe.blobs['data'].shape
+    input_dims = dataset.shape
     batch_size, num_channels, input_height, input_width = input_dims
     image = cv2.imread(input_path, 1).astype(np.float32) - dataset.mean_pixel
     image_size = image.shape
@@ -144,7 +129,7 @@ def predict(dataset_name, input_path, output_path):
             col_prediction.append(prob)
         col_prediction = np.concatenate(col_prediction, axis=1)
         prediction.append(col_prediction)
-    prob = np.concatenate(prediction, axis=1).transpose().reshape((21,66,66))
+    prob = np.concatenate(prediction, axis=1).transpose().reshape((21, 66, 66))
     if dataset.zoom > 1:
         prob = interp_map(prob, dataset.zoom, image_size[1], image_size[0])
     prediction = np.argmax(prob.transpose([1, 2, 0]), axis=2)
@@ -163,21 +148,11 @@ def main():
     parser.add_argument('input_path', nargs='?', default='',
                         help='Required path to input image')
     parser.add_argument('-o', '--output_path', default=None)
-    parser.add_argument('--gpu', type=int, default=-1,
-                        help='GPU ID to run CAFFE. '
-                             'If -1 (default), CPU is used')
     args = parser.parse_args()
     if args.input_path == '':
         raise IOError('Error: No path to input image')
     if not exists(args.input_path):
         raise IOError("Error: Can't find input image " + args.input_path)
-    if args.gpu >= 0:
-        caffe.set_mode_gpu()
-        caffe.set_device(args.gpu)
-        print('Using GPU ', args.gpu)
-    else:
-        caffe.set_mode_cpu()
-        print('Using CPU')
     if args.output_path is None:
         args.output_path = '{}_{}.png'.format(
                 splitext(args.input_path)[0], args.dataset)

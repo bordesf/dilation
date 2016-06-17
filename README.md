@@ -1,6 +1,15 @@
 # Lasagne implementation of Multi-Scale Context Aggregation by Dilated Convolutions
-The predict file can be used as the original one. It will use Lasagne instead of Caffe to perform
+The predict.py file can be used as the original one. It will use Lasagne instead of Caffe to perform
 the segmentation. The lasagne model is in the file dilated_cnn.py.
+
+To convert the caffe model into pkl file that you can load directly with lasagne, you can use
+convert_to_pkl.py
+
+When you get your pkl file, you can use directly predict_lasagne.py to run the demo.
+
+predict.py use caffe to load the caffemodel and use lasagne to set up the model and make the
+prediction.
+predict_lasagne.py use only lasagne, so you need to convert the caffemodel into pkl before using it.
 
 # Multi-Scale Context Aggregation by Dilated Convolutions
 
