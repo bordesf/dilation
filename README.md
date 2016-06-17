@@ -1,3 +1,7 @@
+# Lasagne implementation of Multi-Scale Context Aggregation by Dilated Convolutions
+The predict file can be used as the original one. It will use Lasagne instead of Caffe to perform
+the segmentation. The lasagne model is in the file dilated_cnn.py.
+
 # Multi-Scale Context Aggregation by Dilated Convolutions
 
 ## Introduction
